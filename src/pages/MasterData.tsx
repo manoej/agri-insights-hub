@@ -46,7 +46,7 @@ const MasterData = () => {
   // N-Tester mapping dialog state
   const [nTesterDialog, setNTesterDialog] = useState<{
     open: boolean;
-    editData?: { crop: string; cultivation: string; mapping: { minReading: number; maxReading: number; topUp: number }; index: number };
+    editData?: { crop: string; cultivation: string; mappings: { minReading: number; maxReading: number; topUp: number }[] };
   }>({ open: false });
 
   // Simple item CRUD handlers
@@ -126,37 +126,30 @@ const MasterData = () => {
   };
 
   // N-Tester mapping handlers
-  const handleNTesterSave = (crop: string, cultivation: string, mapping: { minReading: number; maxReading: number; topUp: number }) => {
+  const handleNTesterSave = (crop: string, cultivation: string, mappings: { minReading: number; maxReading: number; topUp: number }[]) => {
     setNTesterMappings(prev => {
       const updated = { ...prev };
       if (!updated[crop]) updated[crop] = {};
-      if (!updated[crop][cultivation]) updated[crop][cultivation] = [];
-
-      if (nTesterDialog.editData) {
-        updated[crop][cultivation] = updated[crop][cultivation].map((m, i) =>
-          i === nTesterDialog.editData!.index ? mapping : m
-        );
-      } else {
-        updated[crop][cultivation] = [...updated[crop][cultivation], mapping].sort((a, b) => a.minReading - b.minReading);
-      }
+      updated[crop][cultivation] = mappings.sort((a, b) => a.minReading - b.minReading);
       return updated;
     });
     toast({ title: 'Saved', description: `N-Tester mapping for ${crop} / ${cultivation} saved.` });
   };
 
-  const handleDeleteNTesterMapping = (crop: string, cultivation: string, index: number) => {
-    const mapping = nTesterMappings[crop]?.[cultivation]?.[index];
-    if (!mapping) return;
+  const handleDeleteNTesterMapping = (crop: string, cultivation: string) => {
     setDeleteDialog({
       open: true,
-      name: `${mapping.minReading}-${mapping.maxReading} range (${crop} - ${cultivation})`,
+      name: `${crop} - ${cultivation} mappings`,
       onConfirm: () => {
         setNTesterMappings(prev => {
           const updated = { ...prev };
-          updated[crop][cultivation] = updated[crop][cultivation].filter((_, i) => i !== index);
+          if (updated[crop]) {
+            delete updated[crop][cultivation];
+            if (Object.keys(updated[crop]).length === 0) delete updated[crop];
+          }
           return updated;
         });
-        toast({ title: 'Deleted', description: 'N-Tester mapping removed.' });
+        toast({ title: 'Deleted', description: `N-Tester mappings for ${crop} / ${cultivation} removed.` });
         setDeleteDialog(prev => ({ ...prev, open: false }));
       },
     });
@@ -345,58 +338,51 @@ const MasterData = () => {
                 <Plus className="h-4 w-4 mr-1" /> Add N-Tester Mapping
               </Button>
             </div>
-            {Object.entries(nTesterMappings).map(([crop, cultivations]) => (
-              <Card key={crop} className="border-border/50">
-                <CardHeader>
-                  <CardTitle className="font-display flex items-center gap-2">
-                    <TestTube className="h-5 w-5 text-primary" />
-                    {crop} - N-Tester to N Top-up Mapping
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {Object.entries(cultivations).map(([cultivation, mappings]) => (
-                    <div key={cultivation} className="mb-6 last:mb-0">
-                      <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                        <Badge variant="outline">{cultivation}</Badge>
-                      </h4>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>N-Tester Range</TableHead>
-                            <TableHead className="text-center">N Top-up (kg N/ha)</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {mappings.map((mapping, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell className="font-mono">
-                                {mapping.minReading} - {mapping.maxReading}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge variant={mapping.topUp >= 70 ? 'destructive' : mapping.topUp >= 40 ? 'default' : 'secondary'} className="font-mono">
-                                  {mapping.topUp}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setNTesterDialog({ open: true, editData: { crop, cultivation, mapping, index: idx } })}>
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteNTesterMapping(crop, cultivation, idx)}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="font-display flex items-center gap-2">
+                  <TestTube className="h-5 w-5 text-primary" />
+                  N-Tester to N Top-up Mappings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Crop</TableHead>
+                      <TableHead>Cultivation Type</TableHead>
+                      <TableHead className="text-center">Ranges</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(nTesterMappings).flatMap(([crop, cultivations]) =>
+                      Object.entries(cultivations).map(([cultivation, mappings]) => (
+                        <TableRow key={`${crop}-${cultivation}`}>
+                          <TableCell className="font-medium">{crop}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{cultivation}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary">{mappings.length} ranges</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setNTesterDialog({ open: true, editData: { crop, cultivation, mappings } })}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteNTesterMapping(crop, cultivation)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
